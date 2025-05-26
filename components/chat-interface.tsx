@@ -51,12 +51,22 @@ export default function ModernChatInterface({ user, rooms, currentRoomId, initia
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false)
   const [showChatList, setShowChatList] = useState(true)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [messageInput, setMessageInput] = useState("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
 
   const currentRoom = rooms.find((room) => room.id === currentRoomId)
   const onlineUsers = rooms.slice(0, 4)
   const filteredRooms = rooms.filter((room) => room.name.toLowerCase().includes(searchQuery.toLowerCase()))
+
+  // Helper function to format time
+  const formatMessageTime = (timestamp: string) => {
+    return new Date(timestamp).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    })
+  }
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -73,10 +83,16 @@ export default function ModernChatInterface({ user, rooms, currentRoomId, initia
     return () => clearInterval(interval)
   }, [currentRoomId])
 
-  async function handleSendMessage(formData: FormData) {
-    if (!currentRoomId) return
+  async function handleSendMessage(e?: React.FormEvent) {
+    if (e) {
+      e.preventDefault()
+    }
+
+    if (!currentRoomId || !messageInput.trim()) return
 
     setIsLoading(true)
+    const formData = new FormData()
+    formData.append("content", messageInput)
     formData.append("roomId", currentRoomId.toString())
 
     const result = await sendMessage(formData)
@@ -84,9 +100,18 @@ export default function ModernChatInterface({ user, rooms, currentRoomId, initia
     if (result.success) {
       const newMessages = await getMessages(currentRoomId)
       setMessages(newMessages)
+      setMessageInput("")
     }
 
     setIsLoading(false)
+  }
+
+  // Handle Enter key press
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSendMessage()
+    }
   }
 
   async function handleCreateRoom(formData: FormData) {
@@ -255,11 +280,7 @@ export default function ModernChatInterface({ user, rooms, currentRoomId, initia
                     <div className="flex items-center justify-between mb-1">
                       <h4 className="font-medium text-gray-900 truncate">{room.name}</h4>
                       <span className="text-xs text-gray-500">
-                        {new Date().toLocaleTimeString("en-US", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          hour12: false,
-                        })}
+                        {formatMessageTime(new Date().toISOString())}
                       </span>
                     </div>
                     <p className="text-sm text-gray-500 truncate">{room.description || "Start a conversation..."}</p>
@@ -433,21 +454,20 @@ export default function ModernChatInterface({ user, rooms, currentRoomId, initia
                         300000) && (
                       <div className="text-center">
                         <span className="text-xs text-gray-400 bg-gray-50 px-3 py-1 rounded-full">
-                          {new Date(message.created_at).toLocaleTimeString("en-US", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            hour12: false,
-                          })}
+                          {formatMessageTime(message.created_at)}
                         </span>
                       </div>
                     )}
 
                     <div className={`flex gap-3 ${message.user_id === user.id ? "justify-end" : "justify-start"}`}>
                       {message.user_id !== user.id && (
-                        <Avatar className="w-8 h-8 mt-1 flex-shrink-0">
-                          <AvatarImage src={message.avatar_url || "/placeholder.svg"} />
-                          <AvatarFallback>{message.username?.[0]?.toUpperCase()}</AvatarFallback>
-                        </Avatar>
+                        <div className="flex flex-col items-start gap-1">
+                          <Avatar className="w-8 h-8 mt-1 flex-shrink-0">
+                            <AvatarImage src={message.avatar_url || "/placeholder.svg"} />
+                            <AvatarFallback>{message.username?.[0]?.toUpperCase()}</AvatarFallback>
+                          </Avatar>
+                          <span className="text-xs text-gray-500">{message.username}</span>
+                        </div>
                       )}
 
                       <div
@@ -461,6 +481,9 @@ export default function ModernChatInterface({ user, rooms, currentRoomId, initia
                           }`}
                         >
                           {message.content}
+                          <div className="text-xs mt-1 text-right">
+                            {formatMessageTime(message.created_at)}
+                          </div>
                         </div>
 
                         {/* Message status */}
@@ -474,10 +497,13 @@ export default function ModernChatInterface({ user, rooms, currentRoomId, initia
                       </div>
 
                       {message.user_id === user.id && (
-                        <Avatar className="w-8 h-8 mt-1 flex-shrink-0">
-                          <AvatarImage src={user.avatar_url || "/placeholder.svg"} />
-                          <AvatarFallback>{user.username[0].toUpperCase()}</AvatarFallback>
-                        </Avatar>
+                        <div className="flex flex-col items-end gap-1">
+                          <Avatar className="w-8 h-8 mt-1 flex-shrink-0">
+                            <AvatarImage src={user.avatar_url || "/placeholder.svg"} />
+                            <AvatarFallback>{user.username[0].toUpperCase()}</AvatarFallback>
+                          </Avatar>
+                          <span className="text-xs text-gray-500">{user.username}</span>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -488,14 +514,16 @@ export default function ModernChatInterface({ user, rooms, currentRoomId, initia
 
             {/* Message Input */}
             <div className="p-4 lg:p-6 border-t border-gray-100 bg-white">
-              <form action={handleSendMessage} className="flex items-center gap-3">
+              <form onSubmit={handleSendMessage} className="flex items-center gap-3">
                 <Avatar className="w-10 h-10 hidden sm:block">
                   <AvatarImage src={user.avatar_url || "/placeholder.svg"} />
                   <AvatarFallback>{user.username[0].toUpperCase()}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 relative">
                   <Input
-                    name="content"
+                    value={messageInput}
+                    onChange={(e) => setMessageInput(e.target.value)}
+                    onKeyPress={handleKeyPress}
                     placeholder="Type your message..."
                     className="pr-24 bg-gray-50 border-0 rounded-full h-12 focus:bg-white focus:ring-2 focus:ring-blue-500"
                     disabled={isLoading}
