@@ -1,7 +1,6 @@
 "use server"
 
 import { sql } from "@/lib/db"
-import { redirect } from "next/navigation"
 import { cookies } from "next/headers"
 
 export async function loginUser(formData: FormData) {
@@ -65,7 +64,12 @@ export async function getCurrentUser() {
 }
 
 export async function logoutUser() {
-  const cookieStore = await cookies()
-  cookieStore.delete("user_id")
-  redirect("/login")
+  try {
+    const cookieStore = await cookies()
+    cookieStore.delete("user_id")
+    return { success: true }
+  } catch (error) {
+    console.error("Logout error:", error)
+    return { error: "Logout mein problem hui hai" }
+  }
 }
